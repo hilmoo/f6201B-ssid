@@ -14,7 +14,9 @@ import (
 
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
-var loginTokenRe = regexp.MustCompile(`<ajax_response_xml_root>\s*([^<\s]+)\s*</ajax_response_xml_root>`)
+var preemptRe = regexp.MustCompile(`name="preempt_sessid"\s+value=["']?([0-9A-Za-z]+)`)
+
+var loginTokenRe =regexp.MustCompile(`<ajax_response_xml_root>\s*([^<\s]+)\s*</ajax_response_xml_root>`)
 
 // F6201B uses an ajax login flow:
 //  1. GET  /                                   -> initial cookies
@@ -70,6 +72,12 @@ func loginToRouter(config Config) (*http.Client, error) {
 		return nil, fmt.Errorf("failed to send login request: %v", err)
 	}
 
+	// If another user is logged in, the router answers with a "pick a user to kick" page
+	// instead of the dashboard. Take over their session.
+	if err := preemptOtherUser(client, base); err != nil {
+		return nil, err
+	}
+
 	parsedURL, err := url.Parse(config.RouterURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid router URL: %v", err)
@@ -82,4 +90,33 @@ func loginToRouter(config Config) (*http.Client, error) {
 	}
 
 	return nil, fmt.Errorf("login failed: session cookie not found (response: %s)", string(body))
+}
+
+// preemptOtherUser kicks the other logged-in user, if the router is asking us to.
+func preemptOtherUser(client *http.Client, base string) error {
+	page, err := routerRequest(client, "GET", base+"/", nil)
+	if err != nil {
+		return fmt.Errorf("failed to load router page after login: %v", err)
+	}
+	m := preemptRe.FindSubmatch(page)
+	if m == nil {
+		return nil
+	}
+
+	fmt.Println("Another user is logged in, taking over their session...")
+	form := url.Values{}
+	form.Set("action", "preempt")
+	form.Set("preempt_sessid", string(m[1]))
+	if _, err := routerRequest(client, "POST", base+"/?_type=loginData&_tag=login_preempt", strings.NewReader(form.Encode())); err != nil {
+		return fmt.Errorf("failed to preempt other user: %v", err)
+	}
+
+	page, err = routerRequest(client, "GET", base+"/", nil)
+	if err != nil {
+		return fmt.Errorf("failed to load router page after preempt: %v", err)
+	}
+	if preemptRe.Match(page) {
+		return fmt.Errorf("login failed: could not take over the other user's session")
+	}
+	return nil
 }
