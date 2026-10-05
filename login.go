@@ -1,0 +1,85 @@
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+var loginTokenRe = regexp.MustCompile(`<ajax_response_xml_root>\s*([^<\s]+)\s*</ajax_response_xml_root>`)
+
+// F6201B uses an ajax login flow:
+//  1. GET  /                                   -> initial cookies
+//  2. GET  /?_type=loginData&_tag=login_entry  -> JSON {"sess_token": "..."}
+//  3. GET  /?_type=loginData&_tag=login_token  -> XML  <ajax_response_xml_root>TOKEN</...>
+//  4. POST /?_type=loginData&_tag=login_entry  -> Password = sha256(password + TOKEN), sets SID cookie
+func loginToRouter(config Config) (*http.Client, error) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cookie jar: %v", err)
+	}
+	client := &http.Client{Jar: jar}
+
+	base := strings.TrimRight(config.RouterURL, "/")
+
+	if _, err := routerRequest(client, "GET", base+"/", nil); err != nil {
+		return nil, fmt.Errorf("failed to connect to router: %v", err)
+	}
+
+	entryURL := base + "/?_type=loginData&_tag=login_entry"
+
+	body, err := routerRequest(client, "GET", entryURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get session token: %v", err)
+	}
+	var entry struct {
+		SessToken string `json:"sess_token"`
+	}
+	if err := json.Unmarshal(body, &entry); err != nil || entry.SessToken == "" {
+		return nil, fmt.Errorf("could not extract session token from response: %s", string(body))
+	}
+
+	body, err = routerRequest(client, "GET", base+"/?_type=loginData&_tag=login_token", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get login token: %v", err)
+	}
+	m := loginTokenRe.FindSubmatch(body)
+	if m == nil {
+		return nil, fmt.Errorf("could not extract login token from response: %s", string(body))
+	}
+	loginToken := string(m[1])
+
+	hash := sha256.Sum256([]byte(config.Password + loginToken))
+
+	form := url.Values{}
+	form.Set("action", "login")
+	form.Set("Username", config.Username)
+	form.Set("Password", hex.EncodeToString(hash[:]))
+	form.Set("_sessionTOKEN", entry.SessToken)
+
+	body, err = routerRequest(client, "POST", entryURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to send login request: %v", err)
+	}
+
+	parsedURL, err := url.Parse(config.RouterURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid router URL: %v", err)
+	}
+	for _, cookie := range jar.Cookies(parsedURL) {
+		if cookie.Name == "SID" {
+			fmt.Println("Login successful, cookie acquired!")
+			return client, nil
+		}
+	}
+
+	return nil, fmt.Errorf("login failed: session cookie not found (response: %s)", string(body))
+}
