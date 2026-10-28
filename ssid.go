@@ -36,9 +36,15 @@ var (
 	secretParams = regexp.MustCompile(`^(KeyPassphrase|MasterAuthServerSecret|WEPKey\d+)$`)
 )
 
+// Enable turns on the given SSID numbers.
+func (c *Client) Enable(ssids ...int) error { return c.ToggleSSIDs(true, ssids...) }
+
+// Disable turns off the given SSID numbers.
+func (c *Client) Disable(ssids ...int) error { return c.ToggleSSIDs(false, ssids...) }
+
 // ToggleSSIDs enables or disables the given SSID numbers (e.g. 1 and 5).
-func ToggleSSIDs(client *http.Client, routerURL string, enable bool, ssids ...int) error {
-	base := strings.TrimRight(routerURL, "/")
+func (c *Client) ToggleSSIDs(enable bool, ssids ...int) error {
+	client, base := c.http, c.base
 
 	pubKey, err := fetchPublicKey(client, base)
 	if err != nil {

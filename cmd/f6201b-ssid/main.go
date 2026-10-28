@@ -60,7 +60,7 @@ func main() {
 	}
 	fmt.Println("Login successful, cookie acquired!")
 
-	if err := ssid.ToggleSSIDs(client, config.RouterURL, enable, wlan1, wlan2); err != nil {
+	if err := client.ToggleSSIDs(enable, wlan1, wlan2); err != nil {
 		fmt.Printf("Failed to toggle SSID: %v\n", err)
 		return
 	}

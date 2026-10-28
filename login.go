@@ -16,13 +16,13 @@ var preemptRe = regexp.MustCompile(`name="preempt_sessid"\s+value=["']?([0-9A-Za
 
 var loginTokenRe = regexp.MustCompile(`<ajax_response_xml_root>\s*([^<\s]+)\s*</ajax_response_xml_root>`)
 
-// Login authenticates against the router and returns an HTTP client holding the
+// Login authenticates against the router and returns a Client holding the
 // session cookie. F6201B uses an ajax login flow:
 //  1. GET  /                                   -> initial cookies
 //  2. GET  /?_type=loginData&_tag=login_entry  -> JSON {"sess_token": "..."}
 //  3. GET  /?_type=loginData&_tag=login_token  -> XML  <ajax_response_xml_root>TOKEN</...>
 //  4. POST /?_type=loginData&_tag=login_entry  -> Password = sha256(password + TOKEN), sets SID cookie
-func Login(config Config) (*http.Client, error) {
+func Login(config Config) (*Client, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cookie jar: %v", err)
@@ -83,7 +83,7 @@ func Login(config Config) (*http.Client, error) {
 	}
 	for _, cookie := range jar.Cookies(parsedURL) {
 		if cookie.Name == "SID" {
-			return client, nil
+			return &Client{http: client, base: base}, nil
 		}
 	}
 

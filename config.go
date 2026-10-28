@@ -7,6 +7,12 @@ import (
 
 const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 
+// Client is a logged-in session on the router. Create one with Login.
+type Client struct {
+	http *http.Client
+	base string
+}
+
 // Config holds the router address and credentials used by Login.
 type Config struct {
 	RouterURL string
