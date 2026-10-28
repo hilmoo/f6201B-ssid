@@ -1,4 +1,4 @@
-package main
+package ssid
 
 import (
 	"crypto/rand"
@@ -36,8 +36,8 @@ var (
 	secretParams = regexp.MustCompile(`^(KeyPassphrase|MasterAuthServerSecret|WEPKey\d+)$`)
 )
 
-// toggleSSIDs enables or disables the given SSID numbers (e.g. 1 and 5).
-func toggleSSIDs(client *http.Client, routerURL string, enable bool, ssids ...int) error {
+// ToggleSSIDs enables or disables the given SSID numbers (e.g. 1 and 5).
+func ToggleSSIDs(client *http.Client, routerURL string, enable bool, ssids ...int) error {
 	base := strings.TrimRight(routerURL, "/")
 
 	pubKey, err := fetchPublicKey(client, base)
@@ -109,7 +109,8 @@ func setSSID(client *http.Client, base string, pubKey *rsa.PublicKey, n int, ena
 	form.Set("_sessionTOKEN", token)
 	body := form.Encode()
 
-	// Integrity header: RSA(sha256(body)).
+	// Integrity header: RSA(sha256(body)). The router's web UI (JSEncrypt) only speaks
+	// PKCS#1 v1.5, so OAEP is not an option here despite the deprecation.
 	sum := sha256.Sum256([]byte(body))
 	check, err := rsa.EncryptPKCS1v15(rand.Reader, pubKey, []byte(hex.EncodeToString(sum[:])))
 	if err != nil {

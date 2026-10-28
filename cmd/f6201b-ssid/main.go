@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	ssid "github.com/hilmoo/f6201B-ssid"
 )
 
 type Config struct {
-	RouterURL  string
-	Username   string
-	Password   string
+	ssid.Config
 	Wlan1Index string
 	Wlan2Index string
 }
@@ -33,9 +33,11 @@ func main() {
 	}
 
 	config := Config{
-		RouterURL:  getEnv("ROUTER_URL", nil),
-		Username:   getEnv("ROUTER_USERNAME", nil),
-		Password:   getEnv("ROUTER_PASSWORD", nil),
+		Config: ssid.Config{
+			RouterURL: getEnv("ROUTER_URL", nil),
+			Username:  getEnv("ROUTER_USERNAME", nil),
+			Password:  getEnv("ROUTER_PASSWORD", nil),
+		},
 		Wlan1Index: getEnv("WLAN1_INDEX", stringPtr("1")),
 		Wlan2Index: getEnv("WLAN2_INDEX", stringPtr("5")),
 	}
@@ -51,14 +53,21 @@ func main() {
 		return
 	}
 
-	client, err := loginToRouter(config)
+	client, err := ssid.Login(config.Config)
 	if err != nil {
 		fmt.Printf("Login failed: %v\n", err)
 		return
 	}
+	fmt.Println("Login successful, cookie acquired!")
 
-	if err := toggleSSIDs(client, config.RouterURL, enable, wlan1, wlan2); err != nil {
+	if err := ssid.ToggleSSIDs(client, config.RouterURL, enable, wlan1, wlan2); err != nil {
 		fmt.Printf("Failed to toggle SSID: %v\n", err)
 		return
 	}
+
+	state := "disabled"
+	if enable {
+		state = "enabled"
+	}
+	fmt.Printf("SSID%d and SSID%d %s\n", wlan1, wlan2, state)
 }

@@ -1,4 +1,4 @@
-package main
+package ssid
 
 import (
 	"crypto/sha256"
@@ -12,18 +12,17 @@ import (
 	"strings"
 )
 
-const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-
 var preemptRe = regexp.MustCompile(`name="preempt_sessid"\s+value=["']?([0-9A-Za-z]+)`)
 
-var loginTokenRe =regexp.MustCompile(`<ajax_response_xml_root>\s*([^<\s]+)\s*</ajax_response_xml_root>`)
+var loginTokenRe = regexp.MustCompile(`<ajax_response_xml_root>\s*([^<\s]+)\s*</ajax_response_xml_root>`)
 
-// F6201B uses an ajax login flow:
+// Login authenticates against the router and returns an HTTP client holding the
+// session cookie. F6201B uses an ajax login flow:
 //  1. GET  /                                   -> initial cookies
 //  2. GET  /?_type=loginData&_tag=login_entry  -> JSON {"sess_token": "..."}
 //  3. GET  /?_type=loginData&_tag=login_token  -> XML  <ajax_response_xml_root>TOKEN</...>
 //  4. POST /?_type=loginData&_tag=login_entry  -> Password = sha256(password + TOKEN), sets SID cookie
-func loginToRouter(config Config) (*http.Client, error) {
+func Login(config Config) (*http.Client, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cookie jar: %v", err)
@@ -84,7 +83,6 @@ func loginToRouter(config Config) (*http.Client, error) {
 	}
 	for _, cookie := range jar.Cookies(parsedURL) {
 		if cookie.Name == "SID" {
-			fmt.Println("Login successful, cookie acquired!")
 			return client, nil
 		}
 	}
@@ -103,7 +101,6 @@ func preemptOtherUser(client *http.Client, base string) error {
 		return nil
 	}
 
-	fmt.Println("Another user is logged in, taking over their session...")
 	form := url.Values{}
 	form.Set("action", "preempt")
 	form.Set("preempt_sessid", string(m[1]))

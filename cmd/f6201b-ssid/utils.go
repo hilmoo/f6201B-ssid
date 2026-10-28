@@ -3,8 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 )
@@ -60,23 +58,4 @@ func loadEnvFile() error {
 
 func stringPtr(s string) *string {
 	return &s
-}
-
-func routerRequest(client *http.Client, method, target string, body io.Reader) ([]byte, error) {
-	req, err := http.NewRequest(method, target, body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	if method == "POST" {
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	return io.ReadAll(resp.Body)
 }
